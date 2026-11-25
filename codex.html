@@ -1,0 +1,1983 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ລະບົບລົງທະບຽນ ແລະ ສ້າງ QR Code ສ່ວນບຸກຄົນ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Noto Sans Lao & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Lao:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- QRious Library (Supports UTF-8 Lao text reliably) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <!-- HTML5-QRCode Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans Lao"', '"Inter"', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            200: '#a7f3d0',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065f46',
+                            900: '#064e3b',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom print styles to cleanly print only the digital QR pass */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-pass-area, #printable-pass-area * {
+                visibility: visible;
+            }
+            #printable-pass-area {
+                position: fixed;
+                left: 50%;
+                top: 40px;
+                transform: translateX(-50%);
+                width: 380px !important;
+                box-shadow: none !important;
+                border: 2px solid #cbd5e1 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+
+        /* Smooth fade transition */
+        .fade-in {
+            animation: fadeIn 0.25s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-brand-100 selection:text-brand-900">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 no-print">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-teal-600 flex items-center justify-center text-white shadow-sm">
+                    <i data-lucide="qr-code" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 id="header-app-title" class="font-bold text-slate-900 text-base sm:text-lg leading-tight">ລົງທະບຽນຮັບ QR Code</h1>
+                    <p id="header-app-subtitle" class="text-xs text-slate-500 hidden sm:block">ສຳລັບຜູ້ເຂົ້າຮ່ວມງານປ້ອນຂໍ້ມູນເພື່ອຮັບບັດເຂົ້າງານ</p>
+                </div>
+            </div>
+
+            <!-- Mode & Staff Navigation -->
+            <div class="flex items-center gap-2">
+                <!-- Staff Sub-Tabs (Shown only in Staff Mode) -->
+                <nav id="staff-nav-tabs" class="hidden flex items-center bg-slate-100 p-1 rounded-xl">
+                    <button id="tab-btn-scan" onclick="switchTab('scan')" class="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all bg-white text-brand-700 shadow-sm">
+                        <i data-lucide="scan-line" class="w-4 h-4"></i>
+                        <span>ສະແກນເຂົ້າງານ</span>
+                    </button>
+                    <button id="tab-btn-list" onclick="switchTab('list')" class="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:text-slate-900">
+                        <i data-lucide="users" class="w-4 h-4"></i>
+                        <span>ລາຍຊື່</span>
+                        <span id="badge-count" class="ml-0.5 px-2 py-0.5 text-xs rounded-full bg-brand-100 text-brand-700 font-semibold">0</span>
+                    </button>
+                </nav>
+
+                <!-- Share Link & Mode Switcher -->
+                <button id="btn-share-links" onclick="openShareLinksModal()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-medium transition-colors" title="ຄັດລອກລິ້ງແຍກໜ້າເວັບ">
+                    <i data-lucide="share-2" class="w-4 h-4 text-brand-600"></i>
+                    <span class="hidden md:inline">ລິ້ງແຍກໜ້າ</span>
+                </button>
+                <button id="btn-gsheets-modal" onclick="openGoogleSheetsModal()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs sm:text-sm font-medium transition-colors" title="ເຊື່ອມຕໍ່ Google Sheets">
+                    <i data-lucide="sheet" class="w-4 h-4 text-emerald-600"></i>
+                    <span class="hidden sm:inline">Google Sheets</span>
+                    <span id="gs-status-dot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+                </button>
+                <button id="btn-switch-portal" onclick="togglePortalMode()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-medium transition-colors">
+                    <i data-lucide="shield" class="w-4 h-4 text-brand-400"></i>
+                    <span id="btn-switch-portal-text">ໜ້າສະແກນ (ເຈົ້າໜ້າທີ່)</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+        <!-- ==================== TAB 1: FORM & RESULT ==================== -->
+        <div id="view-form" class="fade-in">
+            
+            <!-- Header Banner & Customize Toggle -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm no-print">
+                <div>
+                    <span class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full mb-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-brand-500"></span> ແບບຟອມອອນລາຍ
+                    </span>
+                    <h2 id="display-form-title" class="text-xl sm:text-2xl font-bold text-slate-900">ແບບຟອມລົງທະບຽນນັກສຶກສາ / ຜູ້ເຂົ້າຮ່ວມ</h2>
+                    <p id="display-form-subtitle" class="text-sm text-slate-500 mt-0.5">ກະລຸນາປ້ອນຂໍ້ມູນ ຊື່, ນາມສະກຸນ, ສາຂາ, ປີຮຽນ ແລະ ເບີໂທ ໃຫ້ຄົບຖ້ວນ ເພື່ອຮັບ QR Code ປະຈຳຕົວ</p>
+                </div>
+            </div>
+
+            <!-- Grid Layout: Form on Left (or full width), QR Result Card appears smoothly -->
+            <div id="form-workspace" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                <!-- Registration Form Card -->
+                <div id="form-card-container" class="lg:col-span-12 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden transition-all duration-300 no-print">
+                    <div class="h-1.5 bg-gradient-to-r from-brand-500 via-teal-500 to-emerald-400"></div>
+                    <form id="registration-form" onsubmit="handleFormSubmit(event)" class="p-6 sm:p-8 space-y-5">
+                        
+                        <!-- Dynamic Fields Container -->
+                        <div id="dynamic-fields-wrapper" class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <!-- Fields rendered by JS -->
+                        </div>
+
+                        <!-- Submit Action Bar -->
+                        <div class="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <p class="text-xs text-slate-500 flex items-center gap-1.5">
+                                <i data-lucide="shield-check" class="w-4 h-4 text-brand-600 shrink-0"></i>
+                                ຂໍ້ມູນຈະຖືກບັນທຶກ ແລະ ສ້າງເປັນ QR Code ສ່ວນບຸກຄົນທັນທີ
+                            </p>
+                            <div class="flex items-center gap-3 w-full sm:w-auto">
+                                <button type="button" onclick="resetFormInputs()" class="w-1/3 sm:w-auto px-4 py-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors">
+                                    ລ້າງຂໍ້ມູນ
+                                </button>
+                                <button type="submit" class="w-2/3 sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white font-semibold text-sm shadow-sm shadow-brand-600/20 transition-all">
+                                    <i data-lucide="qr-code" class="w-4 h-4"></i>
+                                    <span>ບັນທຶກຂໍ້ມູນ ແລະ ສ້າງ QR Code</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Individual QR Code Result Card (Hidden until submitted) -->
+                <div id="qr-result-container" class="hidden lg:col-span-5 fade-in">
+                    <div class="bg-white rounded-2xl border border-brand-200 shadow-lg shadow-brand-900/5 overflow-hidden">
+                        
+                        <!-- Success Status Banner -->
+                        <div class="bg-brand-600 text-white px-5 py-3 flex items-center justify-between no-print">
+                            <div class="flex items-center gap-2 text-sm font-medium">
+                                <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                                <span>ລົງທະບຽນສຳເລັດ!</span>
+                            </div>
+                            <span class="text-xs bg-white/20 px-2.5 py-0.5 rounded-full">ພ້ອມໃຊ້ງານ</span>
+                        </div>
+
+                        <!-- Printable Digital Badge / Pass -->
+                        <div id="printable-pass-area" class="p-6 bg-white">
+                            <!-- Pass Header -->
+                            <div class="text-center border-b border-dashed border-slate-200 pb-4">
+                                <p id="pass-event-title" class="text-xs font-bold uppercase tracking-wider text-brand-700">ແບບຟອມລົງທະບຽນເຂົ້າຮ່ວມງານ</p>
+                                <h3 id="pass-fullname" class="text-xl font-bold text-slate-900 mt-1">ຊື່-ນາມສະກຸນ</h3>
+                                <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200">
+                                    <span class="text-xs text-slate-500">ລະຫັດລົງທະບຽນ:</span>
+                                    <span id="pass-reg-id" class="text-xs font-mono font-bold text-slate-800">REG-2026-0001</span>
+                                </div>
+                            </div>
+
+                            <!-- QR Code Box -->
+                            <div class="my-5 flex flex-col items-center justify-center">
+                                <div class="p-3.5 bg-white rounded-2xl border-2 border-slate-100 shadow-inner flex items-center justify-center">
+                                    <div id="qrcode-canvas-box"></div>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-2.5 flex items-center gap-1">
+                                    <i data-lucide="scan-line" class="w-3.5 h-3.5"></i> ສະແກນ QR Code ເພື່ອກວດສອບຂໍ້ມູນສ່ວນບຸກຄົນ
+                                </p>
+                            </div>
+
+                            <!-- Key Details Summary -->
+                            <div id="pass-details-list" class="bg-slate-50 rounded-xl p-3.5 space-y-2 text-xs border border-slate-100">
+                                <!-- Filled dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Pass Action Buttons -->
+                        <div class="px-6 pb-6 pt-2 space-y-2.5 no-print">
+                            <button onclick="downloadPassAsPNG()" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors shadow-sm">
+                                <i data-lucide="download" class="w-4 h-4"></i>
+                                <span>ດາວໂຫຼດບັດ QR Code (PNG)</span>
+                            </button>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <button onclick="window.print()" class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors">
+                                    <i data-lucide="printer" class="w-4 h-4"></i>
+                                    <span>ພິມບັດ (Print)</span>
+                                </button>
+                                <button onclick="prepareNextRegistration()" class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 text-sm font-semibold transition-colors">
+                                    <i data-lucide="user-plus" class="w-4 h-4"></i>
+                                    <span>ລົງທະບຽນຄົນຕໍ່ໄປ</span>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ==================== TAB 2: SCAN CHECK-IN ==================== -->
+        <div id="view-scan" class="hidden fade-in">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                <!-- Camera Scanner Panel -->
+                <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-3">
+                        <div>
+                            <h2 class="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+                                <i data-lucide="camera" class="w-5 h-5 text-brand-600"></i>
+                                <span>ສະແກນ QR Code ເຊັກອິນເຂົ້າງານ</span>
+                            </h2>
+                            <p class="text-sm text-slate-500 mt-0.5">ສ່ອງກ້ອງໄປທີ່ບັດ QR Code ຂອງຜູ້ເຂົ້າຮ່ວມງານເພື່ອບັນທຶກເວລາເຂົ້າງານ</p>
+                        </div>
+                        <button id="btn-toggle-camera" onclick="toggleCameraScanner()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm transition-colors shrink-0">
+                            <i data-lucide="video" class="w-4 h-4"></i>
+                            <span>ເປີດກ້ອງສະແກນ</span>
+                        </button>
+                    </div>
+
+                    <div class="p-5 sm:p-6 space-y-5">
+                        <!-- Camera Viewport -->
+                        <div class="relative bg-slate-900 rounded-2xl overflow-hidden min-h-[280px] flex flex-col items-center justify-center border border-slate-200">
+                            <div id="qr-reader" class="w-full"></div>
+                            <div id="camera-placeholder" class="p-8 text-center text-slate-300 space-y-3">
+                                <div class="w-14 h-14 rounded-2xl bg-slate-800 text-brand-400 flex items-center justify-center mx-auto">
+                                    <i data-lucide="scan" class="w-7 h-7"></i>
+                                </div>
+                                <p class="text-sm font-medium text-white">ກ້ອງຍັງບໍ່ທັນເປີດໃຊ້ງານ</p>
+                                <p class="text-xs text-slate-400 max-w-xs mx-auto">ກົດປຸ່ມ "ເປີດກ້ອງສະແກນ" ດ້ານເທິງ ຫຼື ພິມລະຫັດລົງທະບຽນດ້ານລຸ່ມເພື່ອເຊັກອິນໄດ້ທັນທີ</p>
+                            </div>
+                        </div>
+
+                        <!-- Manual Check-in Fallback -->
+                        <form onsubmit="handleManualCheckIn(event)" class="bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                            <label class="block text-xs font-semibold text-slate-700 mb-2">ຫຼື ປ້ອນລະຫັດລົງທະບຽນ / ຊື່-ເບີໂທ ເພື່ອເຊັກອິນດ້ວຍຕົນເອງ</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="manual-checkin-input" placeholder="ເຊັ່ນ REG-2026-001... ຫຼື ຊື່ຜູ້ເຂົ້າຮ່ວມ" class="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                                <button type="submit" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors shrink-0">
+                                    ເຊັກອິນ
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Scan Result & Stats Panel -->
+                <div class="lg:col-span-5 space-y-5">
+                    
+                    <!-- Summary Counter Cards -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                            <p class="text-xs text-slate-500 font-medium">ເຂົ້າງານແລ້ວ</p>
+                            <div class="mt-1 flex items-baseline gap-2">
+                                <span id="stat-checked-in" class="text-2xl font-bold text-brand-600">0</span>
+                                <span class="text-xs text-slate-400">ຄົນ</span>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+                            <p class="text-xs text-slate-500 font-medium">ຍັງບໍ່ເຂົ້າງານ</p>
+                            <div class="mt-1 flex items-baseline gap-2">
+                                <span id="stat-pending" class="text-2xl font-bold text-slate-700">0</span>
+                                <span class="text-xs text-slate-400">ຄົນ</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Latest Scan Result Card -->
+                    <div id="scan-result-card" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                        <div id="scan-status-banner" class="bg-slate-100 text-slate-600 px-5 py-3 flex items-center gap-2 text-sm font-semibold">
+                            <i data-lucide="info" class="w-4 h-4"></i>
+                            <span>ລໍຖ້າການສະແກນ QR Code...</span>
+                        </div>
+                        <div id="scan-result-body" class="p-6 text-center text-slate-400 text-sm py-10">
+                            ເມື່ອສະແກນບັດ QR Code ສຳເລັດ ຂໍ້ມູນຊື່ ສາຂາ ປີຮຽນ ແລະ ສະຖານະເຂົ້າງານຈະສະແດງຢູ່ບ່ອນນີ້ທັນທີ
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 3: PARTICIPANT LIST ==================== -->
+        <div id="view-list" class="hidden fade-in">
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                
+                <!-- Toolbar -->
+                <div class="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-900">ລາຍຊື່ຜູ້ລົງທະບຽນທັງໝົດ</h2>
+                        <p class="text-sm text-slate-500">ກວດສອບສະຖານະເຂົ້າງານ ຄລິກເຊັກອິນ ຫຼື ເບິ່ງ QR Code ສ່ວນບຸກຄົນ</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <button onclick="syncFromGoogleSheets(true)" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs sm:text-sm font-semibold transition-colors">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            <span>ດຶງຂໍ້ມູນຈາກ Sheets</span>
+                        </button>
+                        <button onclick="exportToCSV()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition-colors">
+                            <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                            <span>ສົ່ງອອກ Excel (CSV)</span>
+                        </button>
+                        <button onclick="confirmClearAllData()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs sm:text-sm font-medium transition-colors">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            <span>ລ້າງຂໍ້ມູນ</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search & Filter Bar -->
+                <div class="px-5 sm:px-6 py-3.5 bg-slate-50/70 border-b border-slate-100 flex flex-col sm:flex-row gap-3">
+                    <div class="relative flex-1">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="search-input" oninput="renderParticipantsTable()" placeholder="ຄົ້ນຫາດ້ວຍ ຊື່, ນາມສະກຸນ, ລະຫັດ, ສາຂາ, ປີຮຽນ ຫຼື ເບີໂທ..." class="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                    </div>
+                    <select id="status-filter" onchange="renderParticipantsTable()" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:border-brand-500">
+                        <option value="all">ສະແດງທຸກສະຖານະ</option>
+                        <option value="checked-in">ເຂົ້າງານແລ້ວ</option>
+                        <option value="pending">ຍັງບໍ່ເຂົ້າງານ</option>
+                    </select>
+                </div>
+
+                <!-- Responsive Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-200/80 text-xs font-semibold text-slate-500 uppercase bg-slate-50/50">
+                                <th class="py-3.5 px-5">ສະຖານະ</th>
+                                <th class="py-3.5 px-5">ລະຫັດ (ID)</th>
+                                <th class="py-3.5 px-5">ຊື່-ນາມສະກຸນ</th>
+                                <th class="py-3.5 px-5 hidden md:table-cell">ສາຂາ / ປີຮຽນ</th>
+                                <th class="py-3.5 px-5 hidden sm:table-cell">ເບີໂທ</th>
+                                <th class="py-3.5 px-5 text-right">ຈັດການ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="participants-tbody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Rows injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty List State -->
+                <div id="empty-list-state" class="p-12 text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                        <i data-lucide="inbox" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-base font-semibold text-slate-800">ຍັງບໍ່ມີລາຍຊື່ຜູ້ລົງທະບຽນ</h3>
+                    <p class="text-sm text-slate-500 mt-1">ເມື່ອມີຜູ້ປ້ອນຂໍ້ມູນ ຫຼື ສະແກນ QR Code ລາຍຊື່ຈະສະແດງຢູ່ບ່ອນນີ້</p>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ==================== MODAL: STAFF PIN LOGIN ==================== -->
+    <div id="staff-pin-modal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 fade-in text-center space-y-4">
+            <div class="w-12 h-12 rounded-2xl bg-slate-900 text-brand-400 flex items-center justify-center mx-auto">
+                <i data-lucide="lock" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-slate-900">ຢືນຢັນຕົວຕົນເຈົ້າໜ້າທີ່ (Staff)</h3>
+                <p class="text-xs text-slate-500 mt-1">ກະລຸນາປ້ອນລະຫັດຜ່ານເພື່ອເປີດໜ້າສະແກນ ແລະ ເບິ່ງຂໍ້ມູນຜູ້ເຂົ້າງານ</p>
+            </div>
+            <form onsubmit="verifyStaffPin(event)" class="space-y-3">
+                <input type="password" id="staff-pin-input" inputmode="numeric" placeholder="ປ້ອນລະຫັດຜ່ານ (ຄ່າເລີ່ມຕົ້ນ: 1234)" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-center text-lg font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" required>
+                <div class="flex gap-2">
+                    <button type="button" onclick="cancelStaffPin()" class="w-1/3 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50">
+                        ກັບຄືນ
+                    </button>
+                    <button type="submit" class="w-2/3 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold">
+                        ເຂົ້າສູ່ລະບົບສະແກນ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: SHARE SEPARATE PORTAL LINKS ==================== -->
+    <div id="share-links-modal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden fade-in">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="link" class="w-5 h-5 text-brand-600"></i>
+                    <h3 class="font-bold text-slate-900 text-lg">ລິ້ງແຍກໜ້າລົງທະບຽນ / ໜ້າສະແກນ</h3>
+                </div>
+                <button onclick="closeShareLinksModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    ທ່ານສາມາດສົ່ງລິ້ງແຍກໃຫ້ແຕ່ລະຝ່າຍໄດ້ທັນທີ ໂດຍຜູ້ເຂົ້າຮ່ວມຈະເຫັນສະເພາະໜ້າປ້ອນຟອມຮັບ QR Code ສ່ວນທີມງານຈະເຫັນສະເພາະໜ້າກ້ອງສະແກນ ແລະ ລາຍຊື່ຜູ້ເຂົ້າງານ
+                </p>
+
+                <!-- Register Link -->
+                <div class="p-3.5 rounded-xl bg-brand-50/60 border border-brand-200/80 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-brand-800 flex items-center gap-1.5">
+                            <i data-lucide="user-plus" class="w-4 h-4"></i> 1. ລິ້ງໜ້າລົງທະບຽນ (ສຳລັບຜູ້ເຂົ້າຮ່ວມງານ)
+                        </span>
+                        <a id="open-register-tab" href="?mode=register" target="_blank" class="text-xs font-semibold text-brand-700 hover:underline flex items-center gap-1">
+                            ເປີດແທັບໃໝ່ <i data-lucide="external-link" class="w-3 h-3"></i>
+                        </a>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="url-register-input" readonly class="flex-1 px-3 py-2 rounded-lg border border-brand-200 bg-white text-xs font-mono text-slate-600 focus:outline-none">
+                        <button onclick="copyPortalUrl('url-register-input')" class="px-3.5 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shrink-0">
+                            ຄັດລອກ
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Staff Scan Link -->
+                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <i data-lucide="scan-line" class="w-4 h-4 text-slate-700"></i> 2. ລິ້ງໜ້າສະແກນເຂົ້າງານ (ສຳລັບເຈົ້າໜ້າທີ່)
+                        </span>
+                        <a id="open-staff-tab" href="?mode=staff" target="_blank" class="text-xs font-semibold text-slate-700 hover:underline flex items-center gap-1">
+                            ເປີດແທັບໃໝ່ <i data-lucide="external-link" class="w-3 h-3"></i>
+                        </a>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="url-staff-input" readonly class="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-mono text-slate-600 focus:outline-none">
+                        <button onclick="copyPortalUrl('url-staff-input')" class="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shrink-0">
+                            ຄັດລອກ
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Custom Staff PIN Setting -->
+                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <label class="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <i data-lucide="key-round" class="w-4 h-4 text-brand-600"></i> ຕັ້ງລະຫັດຜ່ານເຈົ້າໜ້າທີ່ (Staff PIN)
+                    </label>
+                    <div class="flex gap-2">
+                        <input type="text" id="setting-staff-pin" placeholder="ເຊັ່ນ 1234" class="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-mono text-slate-700 focus:outline-none">
+                        <button onclick="saveStaffPinSetting()" class="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shrink-0">
+                            ບັນທຶກລະຫັດ
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-slate-500">* ຂໍ້ມູນໃນ QR Code ຖືກເຂົ້າລະຫັດໄວ້ ກ້ອງມືຖືທົ່ວໄປຈະອ່ານບໍ່ອອກ ມີສະເພາະໜ້າສະແກນເຈົ້າໜ້າທີ່ທີ່ໃສ່ລະຫັດຜ່ານນີ້ເທົ່ານັ້ນຈຶ່ງຈະສະແກນເບິ່ງໄດ້</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: GOOGLE SHEETS INTEGRATION ==================== -->
+    <div id="gsheets-modal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden fade-in">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50/50">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+                        <i data-lucide="sheet" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-base sm:text-lg">ເຊື່ອມຕໍ່ Google Sheets (Real-time)</h3>
+                        <p class="text-xs text-slate-500">ບັນທຶກຂໍ້ມູນລົງທະບຽນ ແລະ ສະຖານະສະແກນເຂົ້າງານລົງ Google Sheets ອັດຕະໂນມັດ</p>
+                    </div>
+                </div>
+                <button onclick="closeGoogleSheetsModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-5 flex-1 text-sm">
+                <!-- Step 1: Paste Web App URL -->
+                <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                    <label class="block text-xs font-bold text-slate-800">
+                        1. ວາງລິ້ງ Google Apps Script Web App URL ຂອງທ່ານ:
+                    </label>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="text" id="gs-webhook-url" placeholder="https://script.google.com/macros/s/xxxxx/exec" class="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono text-slate-700 focus:outline-none focus:border-emerald-500">
+                        <button type="button" onclick="pasteGoogleSheetsUrl()" class="px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold shrink-0 transition-colors">
+                            ວາງລິ້ງ (Paste)
+                        </button>
+                        <button type="button" onclick="saveGoogleSheetsUrl()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shrink-0 transition-colors">
+                            ບັນທຶກ & ເຊື່ອມຕໍ່
+                        </button>
+                        <button type="button" onclick="testGoogleSheetsConnection()" class="px-3.5 py-2.5 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-700 text-xs font-semibold shrink-0 transition-colors">
+                            ທົດສອບສົ່ງຂໍ້ມູນ
+                        </button>
+                    </div>
+                    <p id="gs-test-feedback" class="text-[11px] text-slate-500">
+                        * ລິ້ງທີ່ຖືກຕ້ອງຕ້ອງຂຶ້ນຕົ້ນດ້ວຍ <b>https://script.google.com/macros/s/...</b> ແລະ ລົງທ້າຍດ້ວຍ <b>/exec</b>
+                    </p>
+                </div>
+
+                <!-- Step 2: Instructions & Apps Script Code -->
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-800">2. ວິທີຕັ້ງຄ່າໃນ Google Sheets (ເຮັດຄັ້ງດຽວ ໃຊ້ເວລາ 1 ນາທີ):</span>
+                        <button onclick="copyAppsScriptCode()" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            <span>ຄັດລອກໂຄ້ດ Script</span>
+                        </button>
+                    </div>
+
+                    <ol class="text-xs text-slate-600 space-y-1 list-decimal list-inside bg-emerald-50/40 p-3.5 rounded-xl border border-emerald-100">
+                        <li>ສ້າງໄຟລ໌ <b>Google Sheets</b> ໃໝ່ ແລ້ວໄປທີ່ເມນູ <b>Extensions (ສ່ວນຂະຫຍາຍ) &gt; Apps Script</b></li>
+                        <li>ລຶບໂຄ້ດເກົ່າອອກໃຫ້ໝົດ ແລ້ວວາງໂຄ້ດດ້ານລຸ່ມນີ້ລົງໄປ ແລ້ວກົດປຸ່ມ <b>Save (ບັນທຶກ)</b></li>
+                        <li>ກົດປຸ່ມ <b>Deploy (ເຮັດໃຫ້ໃຊ້ງານໄດ້) &gt; New deployment</b></li>
+                        <li>ເລືອກ Type ເປັນ <b>Web app</b>, ຕັ້ງ <i>Execute as: Me</i> ແລະ <i>Who has access: <b>Anyone</b></i> ແລ້ວກົດ <b>Deploy</b></li>
+                        <li>ຄັດລອກ <b>Web app URL</b> ມາວາງໃສ່ຊ່ອງດ້ານເທິງນີ້ແລ້ວກົດບັນທຶກ!</li>
+                    </ol>
+
+                    <pre id="apps-script-code-box" class="bg-slate-900 text-emerald-300 p-3.5 rounded-xl text-[11px] font-mono overflow-x-auto leading-relaxed select-all">function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(["ລະຫັດລົງທະບຽນ", "ສະຖານະເຂົ້າງານ", "ເວລາເຂົ້າງານ", "ຊື່", "ນາມສະກຸນ", "ສາຂາ", "ປີຮຽນ", "ເບີໂທ", "ວັນທີລົງທະບຽນ"]);
+  }
+  var data = JSON.parse(e.postData.contents);
+  var rows = sheet.getDataRange().getValues();
+  
+  // ກວດສອບວ່າມີລະຫັດນີ້ແລ້ວຫຼືຍັງ (ຖ້າມີໃຫ້ອັບເດດສະຖານະເຂົ້າງານ)
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.regId) {
+      sheet.getRange(i + 1, 2).setValue(data.checkedIn ? "ເຂົ້າງານແລ້ວ" : "ຍັງບໍ່ເຂົ້າງານ");
+      sheet.getRange(i + 1, 3).setValue(data.checkInTime || "-");
+      return ContentService.createTextOutput(JSON.stringify({status: "updated"})).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+  
+  // ເພີ່ມແຖວໃໝ່
+  sheet.appendRow([
+    data.regId,
+    data.checkedIn ? "ເຂົ້າງານແລ້ວ" : "ຍັງບໍ່ເຂົ້າງານ",
+    data.checkInTime || "-",
+    data.firstName,
+    data.lastName,
+    data.major,
+    data.studyYear,
+    "'" + data.phone,
+    data.timestamp
+  ]);
+  return ContentService.createTextOutput(JSON.stringify({status: "added"})).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var rows = sheet.getDataRange().getValues();
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue;
+    result.push({
+      uid: String(rows[i][0]),
+      regId: String(rows[i][0]),
+      checkedIn: rows[i][1] === "ເຂົ້າງານແລ້ວ",
+      checkInTime: rows[i][2] === "-" ? null : String(rows[i][2]),
+      firstName: String(rows[i][3] || ""),
+      lastName: String(rows[i][4] || ""),
+      fullName: (String(rows[i][3] || "") + " " + String(rows[i][4] || "")).trim(),
+      major: String(rows[i][5] || ""),
+      studyYear: String(rows[i][6] || ""),
+      phone: String(rows[i][7] || "").replace(/^'/, ""),
+      timestamp: String(rows[i][8] || ""),
+      eventTitle: "ແບບຟອມລົງທະບຽນເຂົ້າຮ່ວມງານ"
+    });
+  }
+  return ContentService.createTextOutput(JSON.stringify(result.reverse())).setMimeType(ContentService.MimeType.JSON);
+}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: CUSTOMIZE FORM FIELDS ==================== -->
+    <div id="customize-modal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden fade-in">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="edit-3" class="w-5 h-5 text-brand-600"></i>
+                    <h3 class="font-bold text-slate-900 text-lg">ແກ້ໄຂຫົວຂໍ້ແບບຟອມ</h3>
+                </div>
+                <button onclick="closeCustomizeModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-4 flex-1">
+                <div class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200/70">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">ຊື່ຫົວຂໍ້ຟອມ / ຊື່ງານ</label>
+                        <input type="text" id="edit-form-title" class="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">ຄຳອະທິບາຍໃຕ້ຫົວຂໍ້</label>
+                        <input type="text" id="edit-form-subtitle" class="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+                <p class="text-xs text-slate-500 flex items-center gap-1.5">
+                    <i data-lucide="info" class="w-4 h-4 text-brand-600 shrink-0"></i>
+                    ຊ່ອງປ້ອນຂໍ້ມູນຖືກກຳນົດມາດຕະຖານໄວ້ 5 ຊ່ອງ ໄດ້ແກ່ ຊື່, ນາມສະກຸນ, ສາຂາ, ປີຮຽນ ແລະ ເບີໂທ
+                </p>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3">
+                <button type="button" onclick="resetDefaultSchema()" class="text-xs text-slate-500 hover:text-slate-800 underline">
+                    ຄືນຄ່າເລີ່ມຕົ້ນ
+                </button>
+                <div class="flex items-center gap-2.5">
+                    <button type="button" onclick="closeCustomizeModal()" class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50">
+                        ຍົກເລີກ
+                    </button>
+                    <button type="button" onclick="saveFormSchema()" class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm">
+                        ບັນທຶກການຕັ້ງຄ່າ
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: VIEW SINGLE QR PASS FROM LIST ==================== -->
+    <div id="view-qr-modal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden fade-in">
+            <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                <span class="font-bold text-slate-800 text-sm">ບັດ QR Code ປະຈຳຕົວ</span>
+                <button onclick="closeViewQrModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div class="p-6">
+                <div class="text-center border-b border-dashed border-slate-200 pb-4">
+                    <p id="modal-pass-title" class="text-xs font-bold text-brand-700 uppercase"></p>
+                    <h3 id="modal-pass-name" class="text-xl font-bold text-slate-900 mt-1"></h3>
+                    <span id="modal-pass-id" class="inline-block mt-1.5 px-3 py-0.5 rounded-full bg-slate-100 text-xs font-mono font-bold text-slate-700"></span>
+                </div>
+
+                <div class="my-5 flex justify-center">
+                    <div class="p-3 bg-white rounded-2xl border-2 border-slate-100 shadow-inner">
+                        <div id="modal-qrcode-box"></div>
+                    </div>
+                </div>
+
+                <div id="modal-pass-details" class="bg-slate-50 rounded-xl p-3.5 space-y-1.5 text-xs border border-slate-100 mb-5"></div>
+
+                <button onclick="downloadModalPassPNG()" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>ດາວໂຫຼດຮູບພາບ QR Code (PNG)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== CUSTOM CONFIRM / TOAST MESSAGE ==================== -->
+    <div id="confirm-dialog" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 fade-in">
+            <div class="w-11 h-11 rounded-full bg-red-50 text-red-600 flex items-center justify-center mb-4">
+                <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+            </div>
+            <h3 id="confirm-title" class="text-lg font-bold text-slate-900">ຢືນຢັນການລຶບຂໍ້ມູນ?</h3>
+            <p id="confirm-message" class="text-sm text-slate-500 mt-1">ການດຳເນີນການນີ້ບໍ່ສາມາດຍ້ອນກັບໄດ້</p>
+            <div class="mt-6 flex items-center justify-end gap-2.5">
+                <button onclick="closeConfirmDialog()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50">ຍົກເລີກ</button>
+                <button id="confirm-yes-btn" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold">ຢືນຢັນລຶບ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: SCAN RESULT ALERT / MESSAGE BOX ==================== -->
+    <div id="scan-alert-modal" class="hidden fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden fade-in">
+            <div id="scan-alert-header" class="px-6 py-5 text-center text-white bg-brand-600">
+                <div id="scan-alert-icon-box" class="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-2.5">
+                    <i data-lucide="check-circle-2" class="w-8 h-8 text-white"></i>
+                </div>
+                <h3 id="scan-alert-title" class="text-lg font-bold">ເຊັກອິນເຂົ້າງານສຳເລັດ!</h3>
+                <p id="scan-alert-subtitle" class="text-xs text-white/90 mt-0.5">ບັນທຶກເວລາເຂົ້າງານຮຽບຮ້ອຍແລ້ວ</p>
+            </div>
+
+            <div id="scan-alert-body" class="p-6 space-y-4">
+                <!-- Filled dynamically -->
+            </div>
+
+            <div class="px-6 pb-6">
+                <button id="scan-alert-close-btn" onclick="closeScanAlertModal()" class="w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all">
+                    ຕົກລົງ / ສະແກນຄົນຕໍ່ໄປ
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5 text-sm font-medium">
+            <i data-lucide="check-circle" class="w-4 h-4 text-brand-400"></i>
+            <span id="toast-text">ບັນທຶກຮຽບຮ້ອຍແລ້ວ</span>
+        </div>
+    </div>
+
+    <!-- ==================== APPLICATION LOGIC ==================== -->
+    <script>
+        // --- Fixed 5-Field Form Configuration (Lao Language) ---
+        const DEFAULT_SCHEMA = {
+            title: "ແບບຟອມລົງທະບຽນນັກສຶກສາ / ຜູ້ເຂົ້າຮ່ວມ",
+            subtitle: "ກະລຸນາປ້ອນຂໍ້ມູນທັງ 5 ຊ່ອງໃຫ້ຄົບຖ້ວນ ເພື່ອຮັບ QR Code ປະຈຳຕົວ",
+            fields: [
+                { id: "firstName", label: "ຊື່", type: "text", placeholder: "ປ້ອນຊື່ (ສາມາດໃສ່ຄຳນຳໜ້າ ທ້າວ / ນາງ ໄດ້)", required: true },
+                { id: "lastName", label: "ນາມສະກຸນ", type: "text", placeholder: "ປ້ອນນາມສະກຸນ", required: true },
+                { id: "major", label: "ສາຂາ", type: "text", placeholder: "ເຊັ່ນ CS , CPR,CW,AI", required: true },
+                { id: "studyYear", label: "ປີຮຽນ", type: "year-select", placeholder: "ເລືອກ ຫຼື ລະບຸຊັ້ນປີ (ເຊັ່ນ ປີ 1, ປີ 2, ປີ 3, ປີ 4)", required: true },
+                { id: "phone", label: "ເບີໂທ", type: "tel", placeholder: "ເຊັ່ນ 020 5555 8888", required: true }
+            ]
+        };
+
+        // --- State ---
+        let savedHeader = JSON.parse(localStorage.getItem('qr_app_header_v2')) || {
+            title: DEFAULT_SCHEMA.title,
+            subtitle: DEFAULT_SCHEMA.subtitle
+        };
+        let formSchema = {
+            title: savedHeader.title,
+            subtitle: savedHeader.subtitle,
+            fields: DEFAULT_SCHEMA.fields
+        };
+        let participants = JSON.parse(localStorage.getItem('qr_app_participants_v2')) || [];
+        let currentActiveRecord = null;
+        let modalActiveRecord = null;
+        let html5QrCode = null;
+        let isCameraRunning = false;
+        let lastScannedText = '';
+        let lastScanTime = 0;
+        let currentPortalMode = 'register'; // 'register' or 'staff'
+        let googleSheetsUrl = localStorage.getItem('qr_app_gsheets_url') || '';
+        let staffPin = localStorage.getItem('qr_app_staff_pin') || '1234';
+        let isStaffAuthenticated = sessionStorage.getItem('qr_app_staff_auth') === 'true';
+
+        // --- Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            // Check URL parameter ?gs=... & ?pin=... so shared links carry settings automatically
+            const params = new URLSearchParams(window.location.search);
+            const urlGs = params.get('gs');
+            if (urlGs) {
+                googleSheetsUrl = decodeURIComponent(urlGs);
+                localStorage.setItem('qr_app_gsheets_url', googleSheetsUrl);
+            }
+            const urlPin = params.get('pin');
+            if (urlPin) {
+                staffPin = decodeURIComponent(urlPin);
+                localStorage.setItem('qr_app_staff_pin', staffPin);
+            }
+
+            renderForm();
+            updateCountBadge();
+            updateCheckInStats();
+            updateGoogleSheetsStatusUI();
+
+            // Check URL parameter ?mode=staff or ?mode=register
+            const urlMode = params.get('mode');
+            if (urlMode === 'staff') {
+                setPortalMode('staff', false);
+            } else {
+                setPortalMode('register', false);
+            }
+
+            if (googleSheetsUrl) {
+                syncFromGoogleSheets(false);
+            }
+            lucide.createIcons();
+        });
+
+        // --- Sync Across Browser Tabs Automatically ---
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'qr_app_participants_v2') {
+                participants = JSON.parse(e.newValue || '[]');
+                updateCountBadge();
+                updateCheckInStats();
+                if (!document.getElementById('view-list').classList.contains('hidden')) {
+                    renderParticipantsTable();
+                }
+            }
+        });
+
+        // --- Portal Separation (Register Site vs Staff Scanner Site) ---
+        function setPortalMode(mode, updateUrl = true) {
+            const params = new URLSearchParams(window.location.search);
+            const isStrictPublicRegister = params.get('mode') === 'register' && mode === 'register';
+
+            if (mode === 'staff' && !isStaffAuthenticated) {
+                document.getElementById('staff-pin-input').value = '';
+                document.getElementById('staff-pin-modal').classList.remove('hidden');
+                setTimeout(() => document.getElementById('staff-pin-input').focus(), 100);
+                lucide.createIcons();
+                return;
+            }
+
+            currentPortalMode = mode;
+            const staffTabs = document.getElementById('staff-nav-tabs');
+            const headerTitle = document.getElementById('header-app-title');
+            const headerSub = document.getElementById('header-app-subtitle');
+            const switchBtn = document.getElementById('btn-switch-portal');
+            const switchBtnText = document.getElementById('btn-switch-portal-text');
+            const shareBtn = document.getElementById('btn-share-links');
+            const gsBtn = document.getElementById('btn-gsheets-modal');
+
+            if (updateUrl) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('mode', mode);
+                window.history.replaceState({}, '', url);
+            }
+
+            if (mode === 'staff') {
+                staffTabs.classList.remove('hidden');
+                if (shareBtn) shareBtn.classList.remove('hidden');
+                if (gsBtn) gsBtn.classList.remove('hidden');
+                if (switchBtn) switchBtn.classList.remove('hidden');
+                headerTitle.textContent = 'ຈຸດສະແກນເຊັກອິນເຂົ້າງານ (Staff)';
+                headerSub.textContent = 'ລະບົບສະແກນ QR Code ແລະ ກວດສອບລາຍຊື່ຜູ້ເຂົ້າງານ';
+                switchBtnText.textContent = 'ໄປໜ້າລົງທະບຽນ';
+                switchTab('scan');
+            } else {
+                staffTabs.classList.add('hidden');
+                headerTitle.textContent = 'ລົງທະບຽນຮັບ QR Code';
+                headerSub.textContent = 'ສຳລັບຜູ້ເຂົ້າຮ່ວມງານປ້ອນຂໍ້ມູນເພື່ອຮັບບັດເຂົ້າງານ';
+                switchBtnText.textContent = 'ໜ້າສະແກນ (ເຈົ້າໜ້າທີ່)';
+
+                // Hide staff/admin buttons when opened via public ?mode=register link
+                if (isStrictPublicRegister) {
+                    if (shareBtn) shareBtn.classList.add('hidden');
+                    if (gsBtn) gsBtn.classList.add('hidden');
+                    if (switchBtn) switchBtn.classList.add('hidden');
+                }
+                switchTab('form');
+            }
+            lucide.createIcons();
+        }
+
+        function verifyStaffPin(e) {
+            e.preventDefault();
+            const entered = document.getElementById('staff-pin-input').value.trim();
+            if (entered === staffPin) {
+                isStaffAuthenticated = true;
+                sessionStorage.setItem('qr_app_staff_auth', 'true');
+                document.getElementById('staff-pin-modal').classList.add('hidden');
+                setPortalMode('staff', true);
+                showToast('ເຂົ້າສູ່ໂໝດເຈົ້າໜ້າທີ່ສຳເລັດ');
+            } else {
+                showToast('ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ!');
+                document.getElementById('staff-pin-input').value = '';
+                document.getElementById('staff-pin-input').focus();
+            }
+        }
+
+        function cancelStaffPin() {
+            document.getElementById('staff-pin-modal').classList.add('hidden');
+            if (currentPortalMode !== 'register') {
+                setPortalMode('register', true);
+            }
+        }
+
+        function saveStaffPinSetting() {
+            const newPin = document.getElementById('setting-staff-pin').value.trim();
+            if (!newPin) {
+                showToast('ກະລຸນາປ້ອນລະຫັດຜ່ານ');
+                return;
+            }
+            staffPin = newPin;
+            localStorage.setItem('qr_app_staff_pin', newPin);
+            openShareLinksModal(); // refresh generated URLs with new pin
+            showToast('ບັນທຶກລະຫັດຜ່ານເຈົ້າໜ້າທີ່ແລ້ວ');
+        }
+
+        function togglePortalMode() {
+            setPortalMode(currentPortalMode === 'register' ? 'staff' : 'register', true);
+        }
+
+        function openShareLinksModal() {
+            const baseUrl = window.location.href.split('?')[0];
+            const gsQuery = googleSheetsUrl ? `&gs=${encodeURIComponent(googleSheetsUrl)}` : '';
+            const pinQuery = `&pin=${encodeURIComponent(staffPin)}`;
+            const regUrl = `${baseUrl}?mode=register${gsQuery}${pinQuery}`;
+            const staffUrl = `${baseUrl}?mode=staff${gsQuery}${pinQuery}`;
+
+            document.getElementById('url-register-input').value = regUrl;
+            document.getElementById('url-staff-input').value = staffUrl;
+            document.getElementById('open-register-tab').href = regUrl;
+            document.getElementById('open-staff-tab').href = staffUrl;
+            document.getElementById('setting-staff-pin').value = staffPin;
+
+            document.getElementById('share-links-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeShareLinksModal() {
+            document.getElementById('share-links-modal').classList.add('hidden');
+        }
+
+        // --- Google Sheets Sync Functions ---
+        function openGoogleSheetsModal() {
+            document.getElementById('gs-webhook-url').value = googleSheetsUrl;
+            document.getElementById('gsheets-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeGoogleSheetsModal() {
+            document.getElementById('gsheets-modal').classList.add('hidden');
+        }
+
+        async function pasteGoogleSheetsUrl() {
+            const input = document.getElementById('gs-webhook-url');
+            input.focus();
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    input.value = text.trim();
+                    showToast('ວາງລິ້ງຮຽບຮ້ອຍແລ້ວ');
+                    return;
+                }
+            } catch (e) {}
+            showToast('ກະລຸນາກົດ Ctrl + V ໃນຊ່ອງປ້ອນລິ້ງ');
+        }
+
+        function saveGoogleSheetsUrl() {
+            const val = document.getElementById('gs-webhook-url').value.trim();
+            if (val && (!val.startsWith('https://script.google.com/') || !val.endsWith('/exec'))) {
+                showToast('ລິ້ງບໍ່ຖືກຕ້ອງ! ຕ້ອງລົງທ້າຍດ້ວຍ /exec');
+                return;
+            }
+            googleSheetsUrl = val;
+            localStorage.setItem('qr_app_gsheets_url', val);
+            updateGoogleSheetsStatusUI();
+            if (val) {
+                showToast('ບັນທຶກ URL Google Sheets ແລ້ວ!');
+                syncFromGoogleSheets(true);
+            } else {
+                showToast('ຍົກເລີກການເຊື່ອມຕໍ່ Google Sheets ແລ້ວ');
+            }
+        }
+
+        async function testGoogleSheetsConnection() {
+            const val = document.getElementById('gs-webhook-url').value.trim();
+            const feedback = document.getElementById('gs-test-feedback');
+            if (!val || !val.endsWith('/exec')) {
+                feedback.innerHTML = '<span class="text-red-600 font-semibold">❌ ກະລຸນາວາງ Web app URL ທີ່ລົງທ້າຍດ້ວຍ /exec ກ່ອນທົດສອບ</span>';
+                return;
+            }
+            feedback.innerHTML = '<span class="text-amber-600 font-semibold">⏳ ກຳລັງທົດສອບເຊື່ອມຕໍ່ Google Sheets...</span>';
+            try {
+                const res = await fetch(val);
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    feedback.innerHTML = `<span class="text-emerald-600 font-semibold">✅ ເຊື່ອມຕໍ່ສຳເລັດ! ພົບຂໍ້ມູນໃນ Google Sheets ແລ້ວ ${data.length} ແຖວ</span>`;
+                } else {
+                    feedback.innerHTML = '<span class="text-red-600 font-semibold">❌ ໂຄ້ດ Apps Script ຍັງບໍ່ຖືກຕ້ອງ ກະລຸນາກວດສອບການ Deploy</span>';
+                }
+            } catch (err) {
+                feedback.innerHTML = '<span class="text-red-600 font-semibold">❌ ເຊື່ອມຕໍ່ບໍ່ໄດ້! ໃຫ້ກັບໄປທີ່ Apps Script > Deploy > Manage deployments ແລ້ວປ່ຽນ Who has access ເປັນ "Anyone"</span>';
+            }
+        }
+
+        function updateGoogleSheetsStatusUI() {
+            const dot = document.getElementById('gs-status-dot');
+            if (!dot) return;
+            if (googleSheetsUrl) {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-slate-300';
+            }
+        }
+
+        function copyAppsScriptCode() {
+            const code = document.getElementById('apps-script-code-box').textContent;
+            const textarea = document.createElement('textarea');
+            textarea.value = code;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showToast('ຄັດລອກໂຄ້ດ Apps Script ແລ້ວ');
+        }
+
+        async function pushRecordToGoogleSheets(record) {
+            if (!googleSheetsUrl) return;
+            try {
+                await fetch(googleSheetsUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(record)
+                });
+            } catch (err) {
+                console.error('Google Sheets push error:', err);
+            }
+        }
+
+        async function syncFromGoogleSheets(notify = false) {
+            if (!googleSheetsUrl) {
+                if (notify) openGoogleSheetsModal();
+                return;
+            }
+            try {
+                if (notify) showToast('ກຳລັງດຶງຂໍ້ມູນຈາກ Google Sheets...');
+                const res = await fetch(googleSheetsUrl);
+                const sheetRecords = await res.json();
+                if (Array.isArray(sheetRecords)) {
+                    // Merge sheet records with local records by regId
+                    const map = new Map();
+                    participants.forEach(p => map.set(p.regId, p));
+                    sheetRecords.forEach(sp => {
+                        const existing = map.get(sp.regId);
+                        if (existing) {
+                            existing.checkedIn = existing.checkedIn || sp.checkedIn;
+                            existing.checkInTime = existing.checkInTime || sp.checkInTime;
+                        } else {
+                            map.set(sp.regId, sp);
+                        }
+                    });
+                    participants = Array.from(map.values());
+                    localStorage.setItem('qr_app_participants_v2', JSON.stringify(participants));
+                    updateCountBadge();
+                    updateCheckInStats();
+                    if (!document.getElementById('view-list').classList.contains('hidden')) {
+                        renderParticipantsTable();
+                    }
+                    if (notify) showToast(`ອັບເດດຂໍ້ມູນຈາກ Sheets ແລ້ວ (${participants.length} ລາຍການ)`);
+                }
+            } catch (err) {
+                if (notify) showToast('ບໍ່ສາມາດດຶງຂໍ້ມູນຈາກ Google Sheets ໄດ້ ກະລຸນາກວດສອບ URL');
+            }
+        }
+
+        function copyPortalUrl(inputId) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            input.select();
+            input.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+            showToast('ຄັດລອກລິ້ງຮຽບຮ້ອຍແລ້ວ');
+        }
+
+        // --- Navigation Tabs ---
+        function switchTab(tab) {
+            const viewForm = document.getElementById('view-form');
+            const viewScan = document.getElementById('view-scan');
+            const viewList = document.getElementById('view-list');
+            const btnScan = document.getElementById('tab-btn-scan');
+            const btnList = document.getElementById('tab-btn-list');
+
+            const activeClasses = ['bg-white', 'text-brand-700', 'shadow-sm'];
+            const inactiveClasses = ['text-slate-600', 'hover:text-slate-900'];
+
+            if (tab !== 'scan' && isCameraRunning) {
+                stopCameraScanner();
+            }
+
+            viewForm.classList.add('hidden');
+            viewScan.classList.add('hidden');
+            viewList.classList.add('hidden');
+
+            [btnScan, btnList].forEach(b => {
+                if (!b) return;
+                b.classList.remove(...activeClasses);
+                b.classList.add(...inactiveClasses);
+            });
+
+            if (tab === 'form') {
+                viewForm.classList.remove('hidden');
+            } else if (tab === 'scan') {
+                viewScan.classList.remove('hidden');
+                if (btnScan) {
+                    btnScan.classList.add(...activeClasses);
+                    btnScan.classList.remove(...inactiveClasses);
+                }
+                updateCheckInStats();
+            } else if (tab === 'list') {
+                viewList.classList.remove('hidden');
+                if (btnList) {
+                    btnList.classList.add(...activeClasses);
+                    btnList.classList.remove(...inactiveClasses);
+                }
+                renderParticipantsTable();
+            }
+            lucide.createIcons();
+        }
+
+        // --- Render Dynamic Form ---
+        function renderForm() {
+            document.getElementById('display-form-title').textContent = formSchema.title;
+            document.getElementById('display-form-subtitle').textContent = formSchema.subtitle;
+
+            const wrapper = document.getElementById('dynamic-fields-wrapper');
+            wrapper.innerHTML = '';
+
+            formSchema.fields.forEach((field) => {
+                const div = document.createElement('div');
+                div.className = field.id === 'phone' ? 'sm:col-span-2' : 'sm:col-span-1';
+
+                const labelHtml = `
+                    <label for="input-${field.id}" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                        ${escapeHtml(field.label)}
+                        ${field.required ? '<span class="text-red-500 ml-0.5">*</span>' : ''}
+                    </label>
+                `;
+
+                let inputHtml = '';
+                if (field.type === 'year-select') {
+                    inputHtml = `
+                        <input
+                            type="text"
+                            id="input-${field.id}"
+                            name="${field.id}"
+                            list="study-year-options"
+                            placeholder="${escapeHtml(field.placeholder || '')}"
+                            ${field.required ? 'required' : ''}
+                            class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                        >
+                        <datalist id="study-year-options">
+                            <option value="ປີ 1">
+                            <option value="ປີ 2">
+                            <option value="ປີ 3">
+                            <option value="ປີ 4">
+                        </datalist>
+                    `;
+                } else {
+                    inputHtml = `
+                        <input
+                            type="${field.type}"
+                            id="input-${field.id}"
+                            name="${field.id}"
+                            placeholder="${escapeHtml(field.placeholder || '')}"
+                            ${field.required ? 'required' : ''}
+                            class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                        >
+                    `;
+                }
+
+                div.innerHTML = labelHtml + inputHtml;
+                wrapper.appendChild(div);
+            });
+        }
+
+        function resetFormInputs() {
+            document.getElementById('registration-form').reset();
+        }
+
+        // --- Generate Individual QR Code & Save Record ---
+        function generateRegistrationId() {
+            const year = new Date().getFullYear();
+            const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const seq = String(participants.length + 1).padStart(3, '0');
+            return `REG-${year}-${seq}${randomPart}`;
+        }
+
+        // Encode QR payload into Base64 token so normal phone cameras cannot read personal details directly
+        function encodeQRToken(obj) {
+            const jsonStr = JSON.stringify(obj);
+            const bytes = new TextEncoder().encode(jsonStr);
+            let binStr = '';
+            bytes.forEach(b => binStr += String.fromCharCode(b));
+            return 'EVT1:' + btoa(binStr);
+        }
+
+        function decodeQRToken(rawText) {
+            if (!rawText || !rawText.startsWith('EVT1:')) return null;
+            try {
+                const b64 = rawText.slice(5).trim();
+                const binStr = atob(b64);
+                const bytes = new Uint8Array(binStr.length);
+                for (let i = 0; i < binStr.length; i++) {
+                    bytes[i] = binStr.charCodeAt(i);
+                }
+                const jsonStr = new TextDecoder().decode(bytes);
+                return JSON.parse(jsonStr);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function buildQRPayload(record) {
+            return encodeQRToken({
+                id: record.regId,
+                fn: record.firstName,
+                ln: record.lastName,
+                mj: record.major,
+                yr: record.studyYear,
+                ph: record.phone,
+                ts: record.timestamp
+            });
+        }
+
+        function displayGeneratedPass(record) {
+            const formContainer = document.getElementById('form-card-container');
+            const qrContainer = document.getElementById('qr-result-container');
+
+            formContainer.classList.remove('lg:col-span-12');
+            formContainer.classList.add('lg:col-span-7');
+            qrContainer.classList.remove('hidden');
+
+            document.getElementById('pass-event-title').textContent = record.eventTitle;
+            document.getElementById('pass-fullname').textContent = record.fullName;
+            document.getElementById('pass-reg-id').textContent = record.regId;
+
+            const detailsBox = document.getElementById('pass-details-list');
+            detailsBox.innerHTML = `
+                <div class="flex justify-between gap-2">
+                    <span class="text-slate-500">ສາຂາ:</span>
+                    <span class="font-medium text-slate-800 text-right">${escapeHtml(record.major)}</span>
+                </div>
+                <div class="flex justify-between gap-2">
+                    <span class="text-slate-500">ປີຮຽນ:</span>
+                    <span class="font-medium text-slate-800 text-right">${escapeHtml(record.studyYear)}</span>
+                </div>
+                <div class="flex justify-between gap-2">
+                    <span class="text-slate-500">ເບີໂທ:</span>
+                    <span class="font-medium text-slate-800 text-right">${escapeHtml(record.phone)}</span>
+                </div>
+                <div class="flex justify-between gap-2 pt-1.5 border-t border-slate-200/70 text-[11px] text-slate-400">
+                    <span>ບັນທຶກເມື່ອ:</span>
+                    <span>${escapeHtml(record.timestamp)}</span>
+                </div>
+            `;
+
+            const qrBox = document.getElementById('qrcode-canvas-box');
+            qrBox.innerHTML = '';
+            const qrCanvas = document.createElement('canvas');
+            qrBox.appendChild(qrCanvas);
+            new QRious({
+                element: qrCanvas,
+                value: buildQRPayload(record),
+                size: 190,
+                foreground: "#0f172a",
+                background: "#ffffff",
+                level: "M"
+            });
+
+            lucide.createIcons();
+            qrContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function handleFormSubmit(event) {
+            event.preventDefault();
+
+            const firstName = (document.getElementById('input-firstName')?.value || '').trim();
+            const lastName = (document.getElementById('input-lastName')?.value || '').trim();
+            const major = (document.getElementById('input-major')?.value || '').trim();
+            const studyYear = (document.getElementById('input-studyYear')?.value || '').trim();
+            const phone = (document.getElementById('input-phone')?.value || '').trim();
+
+            if (!firstName || !lastName || !major || !studyYear || !phone) {
+                showToast('ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບທັງ 5 ຊ່ອງ');
+                return;
+            }
+
+            const regId = generateRegistrationId();
+            const now = new Date();
+            const timestamp = now.toLocaleDateString('lo-LA', {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+
+            const fullName = `${firstName} ${lastName}`.trim();
+
+            const newRecord = {
+                uid: Date.now().toString(),
+                regId: regId,
+                firstName: firstName,
+                lastName: lastName,
+                fullName: fullName,
+                major: major,
+                studyYear: studyYear,
+                phone: phone,
+                eventTitle: formSchema.title,
+                timestamp: timestamp,
+                checkedIn: false,
+                checkInTime: null
+            };
+
+            // Save to state & localStorage
+            participants.unshift(newRecord);
+            localStorage.setItem('qr_app_participants_v2', JSON.stringify(participants));
+            updateCountBadge();
+            updateCheckInStats();
+
+            // Send to Google Sheets if connected
+            pushRecordToGoogleSheets(newRecord);
+
+            // Display the generated QR Pass
+            currentActiveRecord = newRecord;
+            displayGeneratedPass(newRecord);
+            showToast(googleSheetsUrl ? 'ບັນທຶກລົງ Google Sheets ແລະ ສ້າງ QR Code ແລ້ວ' : 'ສ້າງ QR Code ສ່ວນບຸກຄົນຮຽບຮ້ອຍແລ້ວ');
+        }
+
+        function prepareNextRegistration() {
+            resetFormInputs();
+            const formContainer = document.getElementById('form-card-container');
+            const qrContainer = document.getElementById('qr-result-container');
+            qrContainer.classList.add('hidden');
+            formContainer.classList.remove('lg:col-span-7');
+            formContainer.classList.add('lg:col-span-12');
+            
+            const firstInput = document.querySelector('#registration-form input');
+            if (firstInput) firstInput.focus();
+            showToast('ພ້ອມສຳລັບຜູ້ລົງທະບຽນຄົນຕໍ່ໄປ');
+        }
+
+        // --- Download High-Res PNG Badge via HTML5 Canvas ---
+        function generatePassPNG(record, qrContainerSelector) {
+            const qrCanvas = document.querySelector(`${qrContainerSelector} canvas`);
+            const qrImg = document.querySelector(`${qrContainerSelector} img`);
+
+            const canvas = document.createElement('canvas');
+            const width = 640;
+            const height = 840;
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+
+            // Top Accent Header Bar
+            const grad = ctx.createLinearGradient(0, 0, width, 0);
+            grad.addColorStop(0, '#10b981');
+            grad.addColorStop(1, '#0d9488');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, 18);
+
+            // Outer Border
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(2, 2, width - 4, height - 4);
+
+            // Event Title
+            ctx.fillStyle = '#047857';
+            ctx.font = 'bold 20px "Noto Sans Lao", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(record.eventTitle, width / 2, 75);
+
+            // Participant Name
+            ctx.fillStyle = '#0f172a';
+            ctx.font = 'bold 34px "Noto Sans Lao", sans-serif';
+            ctx.fillText(record.fullName, width / 2, 130);
+
+            // Registration ID Pill
+            ctx.fillStyle = '#f1f5f9';
+            roundRect(ctx, width / 2 - 150, 155, 300, 44, 22, true, false);
+            ctx.fillStyle = '#334155';
+            ctx.font = 'bold 20px monospace';
+            ctx.fillText(`ID: ${record.regId}`, width / 2, 184);
+
+            // Dashed Divider
+            ctx.beginPath();
+            ctx.setLineDash([8, 8]);
+            ctx.moveTo(60, 230);
+            ctx.lineTo(width - 60, 230);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // QR Code Frame
+            const qrSize = 320;
+            const qrX = (width - qrSize) / 2;
+            const qrY = 265;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 3;
+            roundRect(ctx, qrX - 20, qrY - 20, qrSize + 40, qrSize + 40, 24, true, true);
+
+            // Draw QR Image onto Canvas
+            if (qrCanvas) {
+                ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
+            } else if (qrImg) {
+                ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+            }
+
+            // Details Box at Bottom
+            ctx.fillStyle = '#f8fafc';
+            roundRect(ctx, 50, 645, width - 100, 145, 16, true, false);
+
+            ctx.textAlign = 'left';
+            ctx.font = '18px "Noto Sans Lao", sans-serif';
+            const badgeRows = [
+                { label: 'ສາຂາ', value: record.major },
+                { label: 'ປີຮຽນ', value: record.studyYear },
+                { label: 'ເບີໂທ', value: record.phone }
+            ];
+            
+            let yPos = 685;
+            badgeRows.forEach(item => {
+                ctx.fillStyle = '#64748b';
+                ctx.fillText(`${item.label}:`, 85, yPos);
+                ctx.fillStyle = '#0f172a';
+                ctx.font = 'bold 18px "Noto Sans Lao", sans-serif';
+                const valText = item.value.length > 30 ? item.value.slice(0, 30) + '...' : item.value;
+                ctx.fillText(valText, 195, yPos);
+                ctx.font = '18px "Noto Sans Lao", sans-serif';
+                yPos += 36;
+            });
+
+            // Trigger Download
+            const link = document.createElement('a');
+            link.download = `QR_${record.regId}_${record.fullName.replace(/\s+/g, '_')}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            showToast('ດາວໂຫຼດໄຟລ໌ PNG ສຳເລັດ');
+        }
+
+        function downloadPassAsPNG() {
+            if (!currentActiveRecord) return;
+            generatePassPNG(currentActiveRecord, '#qrcode-canvas-box');
+        }
+
+        function downloadModalPassPNG() {
+            if (!modalActiveRecord) return;
+            generatePassPNG(modalActiveRecord, '#modal-qrcode-box');
+        }
+
+        // Helper for Canvas Rounded Rectangles
+        function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            if (fill) ctx.fill();
+            if (stroke) ctx.stroke();
+        }
+
+        // --- Customize Form Header Modal ---
+        function openCustomizeModal() {
+            document.getElementById('edit-form-title').value = formSchema.title;
+            document.getElementById('edit-form-subtitle').value = formSchema.subtitle;
+            document.getElementById('customize-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeCustomizeModal() {
+            document.getElementById('customize-modal').classList.add('hidden');
+        }
+
+        function saveFormSchema() {
+            const newTitle = document.getElementById('edit-form-title').value.trim() || DEFAULT_SCHEMA.title;
+            const newSub = document.getElementById('edit-form-subtitle').value.trim();
+
+            formSchema.title = newTitle;
+            formSchema.subtitle = newSub;
+
+            localStorage.setItem('qr_app_header_v2', JSON.stringify({ title: newTitle, subtitle: newSub }));
+            renderForm();
+            closeCustomizeModal();
+            showToast('ບັນທຶກຫົວຂໍ້ແບບຟອມແລ້ວ');
+        }
+
+        function resetDefaultSchema() {
+            document.getElementById('edit-form-title').value = DEFAULT_SCHEMA.title;
+            document.getElementById('edit-form-subtitle').value = DEFAULT_SCHEMA.subtitle;
+        }
+
+        // --- Participants List & History ---
+        function updateCountBadge() {
+            document.getElementById('badge-count').textContent = participants.length;
+        }
+
+        function updateCheckInStats() {
+            const checkedInCount = participants.filter(p => p.checkedIn).length;
+            const pendingCount = participants.length - checkedInCount;
+            const elChecked = document.getElementById('stat-checked-in');
+            const elPending = document.getElementById('stat-pending');
+            if (elChecked) elChecked.textContent = checkedInCount;
+            if (elPending) elPending.textContent = pendingCount;
+        }
+
+        // --- QR Code Scanner & Check-In Logic ---
+        async function toggleCameraScanner() {
+            if (isCameraRunning) {
+                await stopCameraScanner();
+            } else {
+                await startCameraScanner();
+            }
+        }
+
+        async function startCameraScanner() {
+            const btn = document.getElementById('btn-toggle-camera');
+            const placeholder = document.getElementById('camera-placeholder');
+
+            try {
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode("qr-reader");
+                }
+                placeholder.classList.add('hidden');
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 220, height: 220 } },
+                    (decodedText) => {
+                        const now = Date.now();
+                        if (decodedText === lastScannedText && now - lastScanTime < 3000) return;
+                        lastScannedText = decodedText;
+                        lastScanTime = now;
+                        processScannedQR(decodedText);
+                    },
+                    () => {}
+                );
+                isCameraRunning = true;
+                btn.innerHTML = `<i data-lucide="video-off" class="w-4 h-4"></i><span>ປິດກ້ອງ</span>`;
+                btn.className = "inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold shadow-sm transition-colors shrink-0";
+                lucide.createIcons();
+            } catch (err) {
+                placeholder.classList.remove('hidden');
+                showToast('ບໍ່ສາມາດເປີດກ້ອງໄດ້ ກະລຸນາອະນຸຍາດສິດກ້ອງ ຫຼື ປ້ອນລະຫັດດ້ານລຸ່ມ');
+            }
+        }
+
+        async function stopCameraScanner() {
+            const btn = document.getElementById('btn-toggle-camera');
+            const placeholder = document.getElementById('camera-placeholder');
+            if (html5QrCode && isCameraRunning) {
+                try {
+                    await html5QrCode.stop();
+                } catch (e) {}
+            }
+            isCameraRunning = false;
+            placeholder.classList.remove('hidden');
+            btn.innerHTML = `<i data-lucide="video" class="w-4 h-4"></i><span>ເປີດກ້ອງສະແກນ</span>`;
+            btn.className = "inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm transition-colors shrink-0";
+            lucide.createIcons();
+        }
+
+        function handleManualCheckIn(e) {
+            e.preventDefault();
+            const input = document.getElementById('manual-checkin-input');
+            const query = input.value.trim();
+            if (!query) return;
+            processScannedQR(query);
+            input.value = '';
+        }
+
+        function processScannedQR(rawText) {
+            // Check if QR is an encrypted EVT1 token (only Staff scanner can decode)
+            const decodedObj = decodeQRToken(rawText);
+
+            // Extract REG-XXXX-XXXXXX from decoded token or manual input
+            const idMatch = decodedObj
+                ? [decodedObj.id]
+                : rawText.match(/REG-\d{4}-[A-Z0-9]+/i);
+            const searchKey = (idMatch ? idMatch[0] : rawText).toLowerCase().trim();
+
+            let person = participants.find(p =>
+                p.regId.toLowerCase() === searchKey ||
+                p.fullName.toLowerCase().includes(searchKey) ||
+                p.phone.replace(/-/g, '').includes(searchKey.replace(/-/g, ''))
+            );
+
+            // Cross-device support: decode encrypted EVT1 QR token directly on Staff device
+            if (!person && decodedObj && decodedObj.id) {
+                const fullName = `${decodedObj.fn || ''} ${decodedObj.ln || ''}`.trim();
+                person = {
+                    uid: Date.now().toString(),
+                    regId: String(decodedObj.id).toUpperCase(),
+                    firstName: decodedObj.fn || fullName,
+                    lastName: decodedObj.ln || '',
+                    fullName: fullName,
+                    major: decodedObj.mj || '-',
+                    studyYear: decodedObj.yr || '-',
+                    phone: decodedObj.ph || '-',
+                    eventTitle: formSchema.title,
+                    timestamp: decodedObj.ts || '-',
+                    checkedIn: false,
+                    checkInTime: null
+                };
+                participants.unshift(person);
+                updateCountBadge();
+            }
+
+            if (!person) {
+                renderScanResultCard('not-found', null, rawText);
+                playBeep(false);
+                return;
+            }
+
+            if (person.checkedIn) {
+                renderScanResultCard('already', person);
+                playBeep(true);
+            } else {
+                const nowStr = new Date().toLocaleTimeString('lo-LA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                person.checkedIn = true;
+                person.checkInTime = nowStr;
+                localStorage.setItem('qr_app_participants_v2', JSON.stringify(participants));
+                pushRecordToGoogleSheets(person);
+                updateCheckInStats();
+                renderScanResultCard('success', person);
+                playBeep(true);
+            }
+        }
+
+        function renderScanResultCard(status, person, rawText = '') {
+            const banner = document.getElementById('scan-status-banner');
+            const body = document.getElementById('scan-result-body');
+
+            // Alert Modal Elements
+            const alertModal = document.getElementById('scan-alert-modal');
+            const alertHeader = document.getElementById('scan-alert-header');
+            const alertIconBox = document.getElementById('scan-alert-icon-box');
+            const alertTitle = document.getElementById('scan-alert-title');
+            const alertSubtitle = document.getElementById('scan-alert-subtitle');
+            const alertBody = document.getElementById('scan-alert-body');
+            const alertCloseBtn = document.getElementById('scan-alert-close-btn');
+
+            if (status === 'not-found') {
+                banner.className = 'bg-red-600 text-white px-5 py-3 flex items-center gap-2 text-sm font-semibold';
+                banner.innerHTML = `<i data-lucide="x-circle" class="w-4 h-4"></i><span>ບໍ່ພົບຂໍ້ມູນໃນລະບົບລົງທະບຽນ</span>`;
+                body.className = 'p-6 text-center space-y-2';
+                body.innerHTML = `
+                    <p class="text-sm font-semibold text-red-600">QR Code ຫຼື ລະຫັດນີ້ບໍ່ຢູ່ໃນລາຍຊື່ຜູ້ລົງທະບຽນ</p>
+                    <p class="text-xs text-slate-400 break-all bg-slate-50 p-2.5 rounded-lg border border-slate-100">${escapeHtml(rawText)}</p>
+                `;
+
+                // Show Red Error Alert Box
+                alertHeader.className = 'px-6 py-5 text-center text-white bg-red-600';
+                alertIconBox.innerHTML = `<i data-lucide="x-circle" class="w-8 h-8 text-white"></i>`;
+                alertTitle.textContent = 'ບໍ່ພົບຂໍ້ມູນໃນລະບົບ!';
+                alertSubtitle.textContent = 'QR Code ຫຼື ລະຫັດນີ້ບໍ່ຖືກຕ້ອງ';
+                alertBody.innerHTML = `
+                    <div class="text-center space-y-2">
+                        <p class="text-sm font-semibold text-red-600">ບໍ່ມີລາຍຊື່ຜູ້ລົງທະບຽນນີ້ໃນລະບົບ</p>
+                        <p class="text-xs text-slate-500 break-all bg-slate-50 p-3 rounded-xl border border-slate-200/80 font-mono">${escapeHtml(rawText)}</p>
+                    </div>
+                `;
+                alertCloseBtn.className = 'w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all';
+            } else {
+                const isAlready = status === 'already';
+                banner.className = isAlready
+                    ? 'bg-amber-500 text-white px-5 py-3 flex items-center justify-between text-sm font-semibold'
+                    : 'bg-brand-600 text-white px-5 py-3 flex items-center justify-between text-sm font-semibold';
+                banner.innerHTML = isAlready
+                    ? `<div class="flex items-center gap-2"><i data-lucide="alert-circle" class="w-4 h-4"></i><span>ຜູ້ເຂົ້າຮ່ວມນີ້ສະແກນເຂົ້າງານໄປແລ້ວ</span></div><span class="text-xs bg-white/20 px-2 py-0.5 rounded-full">ຊ້ຳ</span>`
+                    : `<div class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4"></i><span>ເຊັກອິນເຂົ້າງານສຳເລັດ!</span></div><span class="text-xs bg-white/20 px-2 py-0.5 rounded-full">ເຂົ້າງານແລ້ວ</span>`;
+
+                body.className = 'p-6 text-left space-y-4';
+                body.innerHTML = `
+                    <div class="text-center border-b border-slate-100 pb-3">
+                        <span class="text-xs font-mono font-bold text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full">${escapeHtml(person.regId)}</span>
+                        <h3 class="text-xl font-bold text-slate-900 mt-2">${escapeHtml(person.fullName)}</h3>
+                        <p class="text-xs text-emerald-600 font-semibold mt-1">ເວລາເຂົ້າງານ: ${escapeHtml(person.checkInTime)} ໂມງ</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-3.5 space-y-2 text-xs border border-slate-100">
+                        <div class="flex justify-between"><span class="text-slate-500">ສາຂາ:</span><span class="font-semibold text-slate-800">${escapeHtml(person.major)}</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">ປີຮຽນ:</span><span class="font-semibold text-slate-800">${escapeHtml(person.studyYear)}</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">ເບີໂທ:</span><span class="font-semibold text-slate-800">${escapeHtml(person.phone)}</span></div>
+                    </div>
+                `;
+
+                // Show Success (Green) or Already Checked-in (Amber) Alert Box
+                alertHeader.className = isAlready
+                    ? 'px-6 py-5 text-center text-white bg-amber-500'
+                    : 'px-6 py-5 text-center text-white bg-brand-600';
+                alertIconBox.innerHTML = isAlready
+                    ? `<i data-lucide="alert-circle" class="w-8 h-8 text-white"></i>`
+                    : `<i data-lucide="check-circle-2" class="w-8 h-8 text-white"></i>`;
+                alertTitle.textContent = isAlready ? 'ສະແກນເຂົ້າງານໄປແລ້ວ (ຊ້ຳ)!' : 'ເຊັກອິນເຂົ້າງານສຳເລັດ!';
+                alertSubtitle.textContent = `ເວລາເຂົ້າງານ: ${person.checkInTime} ໂມງ`;
+
+                alertBody.innerHTML = `
+                    <div class="text-center border-b border-slate-100 pb-3">
+                        <span class="text-xs font-mono font-bold text-brand-700 bg-brand-50 px-3 py-1 rounded-full">${escapeHtml(person.regId)}</span>
+                        <h4 class="text-xl font-bold text-slate-900 mt-2">${escapeHtml(person.fullName)}</h4>
+                    </div>
+                    <div class="bg-slate-50 rounded-2xl p-4 space-y-2.5 text-sm border border-slate-100">
+                        <div class="flex justify-between gap-2"><span class="text-slate-500">ສາຂາ:</span><span class="font-bold text-slate-800">${escapeHtml(person.major)}</span></div>
+                        <div class="flex justify-between gap-2"><span class="text-slate-500">ປີຮຽນ:</span><span class="font-bold text-slate-800">${escapeHtml(person.studyYear)}</span></div>
+                        <div class="flex justify-between gap-2"><span class="text-slate-500">ເບີໂທ:</span><span class="font-bold text-slate-800">${escapeHtml(person.phone)}</span></div>
+                    </div>
+                `;
+                alertCloseBtn.className = isAlready
+                    ? 'w-full py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all'
+                    : 'w-full py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all';
+            }
+
+            alertModal.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeScanAlertModal() {
+            document.getElementById('scan-alert-modal').classList.add('hidden');
+            lastScannedText = ''; // Allow scanning next QR immediately after closing alert
+        }
+
+        function playBeep(isSuccess) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = isSuccess ? 880 : 280;
+                osc.type = isSuccess ? 'sine' : 'sawtooth';
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                osc.start();
+                osc.stop(ctx.currentTime + (isSuccess ? 0.15 : 0.3));
+            } catch (e) {}
+        }
+
+        function toggleManualStatusFromTable(uid) {
+            const person = participants.find(p => p.uid === uid);
+            if (!person) return;
+            person.checkedIn = !person.checkedIn;
+            person.checkInTime = person.checkedIn
+                ? new Date().toLocaleTimeString('lo-LA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : null;
+            localStorage.setItem('qr_app_participants_v2', JSON.stringify(participants));
+            pushRecordToGoogleSheets(person);
+            updateCheckInStats();
+            renderParticipantsTable();
+            showToast(person.checkedIn ? `ເຊັກອິນ ${person.fullName} ເຂົ້າງານແລ້ວ` : `ຍົກເລີກສະຖານະເຂົ້າງານຂອງ ${person.fullName}`);
+        }
+
+        function renderParticipantsTable() {
+            const tbody = document.getElementById('participants-tbody');
+            const emptyState = document.getElementById('empty-list-state');
+            const query = document.getElementById('search-input').value.toLowerCase().trim();
+            const statusFilter = document.getElementById('status-filter').value;
+
+            const filtered = participants.filter(p => {
+                if (statusFilter === 'checked-in' && !p.checkedIn) return false;
+                if (statusFilter === 'pending' && p.checkedIn) return false;
+                if (!query) return true;
+                return (
+                    p.fullName.toLowerCase().includes(query) ||
+                    p.regId.toLowerCase().includes(query) ||
+                    p.major.toLowerCase().includes(query) ||
+                    p.studyYear.toLowerCase().includes(query) ||
+                    p.phone.toLowerCase().includes(query)
+                );
+            });
+
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            filtered.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50/80 transition-colors';
+                const statusBadge = p.checkedIn
+                    ? `<button onclick="toggleManualStatusFromTable('${p.uid}')" title="ຄລິກເພື່ອປ່ຽນສະຖານະ" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">
+                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> ເຂົ້າງານແລ້ວ (${escapeHtml(p.checkInTime || '')})
+                       </button>`
+                    : `<button onclick="toggleManualStatusFromTable('${p.uid}')" title="ຄລິກເພື່ອເຊັກອິນເຂົ້າງານ" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-700 text-xs font-medium transition-colors">
+                        <i data-lucide="clock" class="w-3.5 h-3.5"></i> ຍັງບໍ່ເຂົ້າງານ
+                       </button>`;
+
+                tr.innerHTML = `
+                    <td class="py-3.5 px-5 whitespace-nowrap">${statusBadge}</td>
+                    <td class="py-3.5 px-5 font-mono text-xs font-semibold text-brand-700 whitespace-nowrap">
+                        <span class="px-2.5 py-1 rounded-md bg-brand-50 border border-brand-100">${escapeHtml(p.regId)}</span>
+                    </td>
+                    <td class="py-3.5 px-5 font-semibold text-slate-900">
+                        <div>${escapeHtml(p.fullName)}</div>
+                        <div class="text-xs font-normal text-slate-500 md:hidden mt-0.5">${escapeHtml(p.major)} • ${escapeHtml(p.studyYear)}</div>
+                    </td>
+                    <td class="py-3.5 px-5 text-slate-600 hidden md:table-cell">${escapeHtml(p.major)} (${escapeHtml(p.studyYear)})</td>
+                    <td class="py-3.5 px-5 text-slate-600 hidden sm:table-cell">${escapeHtml(p.phone)}</td>
+                    <td class="py-3.5 px-5 text-right whitespace-nowrap">
+                        <div class="inline-flex items-center gap-1.5">
+                            <button onclick="openViewQrModal('${p.uid}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition-colors">
+                                <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+                                <span>ເບິ່ງ QR</span>
+                            </button>
+                            <button onclick="confirmDeleteSingle('${p.uid}')" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="ລຶບລາຍການ">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            lucide.createIcons();
+        }
+
+        // --- View Single QR Code in Modal ---
+        function openViewQrModal(uid) {
+            const record = participants.find(p => p.uid === uid);
+            if (!record) return;
+            modalActiveRecord = record;
+
+            document.getElementById('modal-pass-title').textContent = record.eventTitle;
+            document.getElementById('modal-pass-name').textContent = record.fullName;
+            document.getElementById('modal-pass-id').textContent = record.regId;
+
+            const qrBox = document.getElementById('modal-qrcode-box');
+            qrBox.innerHTML = '';
+            const modalQrCanvas = document.createElement('canvas');
+            qrBox.appendChild(modalQrCanvas);
+            new QRious({
+                element: modalQrCanvas,
+                value: buildQRPayload(record),
+                size: 180,
+                foreground: "#0f172a",
+                background: "#ffffff",
+                level: "M"
+            });
+
+            const detailsBox = document.getElementById('modal-pass-details');
+            detailsBox.innerHTML = `
+                <div class="flex justify-between gap-2">
+                    <span class="text-slate-500">ສາຂາ:</span>
+                    <span class="font-medium text-slate-800 text-right">${escapeHtml(record.major)}</span>
+                </div>
+                <div class="flex justify-between gap-2">
+                    <span class="text-slate-500">ປີຮຽນ:</span>
+                    <span class="font-medium text-slate-800 text-right">${escapeHtml(record.studyYear)}</span>
+                </div>
+                <div class="flex justify-between gap-2">
+                    <span class="text-slate-500">ເບີໂທ:</span>
+                    <span class="font-medium text-slate-800 text-right">${escapeHtml(record.phone)}</span>
+                </div>
+                <div class="flex justify-between gap-2 pt-1.5 border-t border-slate-200/70 text-[11px] text-slate-400">
+                    <span>ບັນທຶກເມື່ອ:</span>
+                    <span>${escapeHtml(record.timestamp)}</span>
+                </div>
+            `;
+
+            document.getElementById('view-qr-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeViewQrModal() {
+            document.getElementById('view-qr-modal').classList.add('hidden');
+        }
+
+        // --- Delete & Export Actions ---
+        function confirmDeleteSingle(uid) {
+            openConfirmDialog(
+                'ລຶບຂໍ້ມູນຜູ້ລົງທະບຽນນີ້?',
+                'ຕ້ອງການລຶບລາຍຊື່ ແລະ QR Code ນີ້ແທ້ບໍ່?',
+                () => {
+                    participants = participants.filter(p => p.uid !== uid);
+                    localStorage.setItem('qr_app_participants_v2', JSON.stringify(participants));
+                    updateCountBadge();
+                    updateCheckInStats();
+                    renderParticipantsTable();
+                    showToast('ລຶບຂໍ້ມູນຮຽບຮ້ອຍແລ້ວ');
+                }
+            );
+        }
+
+        function confirmClearAllData() {
+            if (participants.length === 0) {
+                showToast('ບໍ່ມີຂໍ້ມູນໃຫ້ລຶບ');
+                return;
+            }
+            openConfirmDialog(
+                'ລ້າງລາຍຊື່ທັງໝົດ?',
+                `ຂໍ້ມູນຜູ້ລົງທະບຽນທັງໝົດ ${participants.length} ລາຍການຈະຖືກລຶບຢ່າງຖາວອນ`,
+                () => {
+                    participants = [];
+                    localStorage.setItem('qr_app_participants_v2', JSON.stringify(participants));
+                    updateCountBadge();
+                    updateCheckInStats();
+                    renderParticipantsTable();
+                    showToast('ລ້າງຂໍ້ມູນທັງໝົດຮຽບຮ້ອຍແລ້ວ');
+                }
+            );
+        }
+
+        function exportToCSV() {
+            if (participants.length === 0) {
+                showToast('ຍັງບໍ່ມີຂໍ້ມູນສຳລັບສົ່ງອອກ');
+                return;
+            }
+
+            const headers = ['ລະຫັດລົງທະບຽນ (ID)', 'ສະຖານະເຂົ້າງານ', 'ເວລາເຂົ້າງານ', 'ຊື່', 'ນາມສະກຸນ', 'ສາຂາ', 'ປີຮຽນ', 'ເບີໂທ', 'ວັນເວລາທີ່ລົງທະບຽນ'];
+            const rows = [headers.map(h => `"${h}"`).join(',')];
+
+            participants.forEach(p => {
+                const row = [
+                    `"${p.regId.replace(/"/g, '""')}"`,
+                    `"${p.checkedIn ? 'ເຂົ້າງານແລ້ວ' : 'ຍັງບໍ່ເຂົ້າງານ'}"`,
+                    `"${p.checkInTime || '-'}"`,
+                    `"${p.firstName.replace(/"/g, '""')}"`,
+                    `"${p.lastName.replace(/"/g, '""')}"`,
+                    `"${p.major.replace(/"/g, '""')}"`,
+                    `"${p.studyYear.replace(/"/g, '""')}"`,
+                    `"${p.phone.replace(/"/g, '""')}"`,
+                    `"${p.timestamp}"`
+                ];
+                rows.push(row.join(','));
+            });
+
+            // Add UTF-8 BOM so Excel opens Lao characters properly
+            const csvContent = '\uFEFF' + rows.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ລາຍຊື່ລົງທະບຽນ_${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+            showToast('ສົ່ງອອກໄຟລ໌ CSV ຮຽບຮ້ອຍແລ້ວ');
+        }
+
+        // --- Custom Confirm Dialog & Toast ---
+        function openConfirmDialog(title, message, onConfirm) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+            const yesBtn = document.getElementById('confirm-yes-btn');
+            yesBtn.onclick = () => {
+                onConfirm();
+                closeConfirmDialog();
+            };
+            document.getElementById('confirm-dialog').classList.remove('hidden');
+        }
+
+        function closeConfirmDialog() {
+            document.getElementById('confirm-dialog').classList.add('hidden');
+        }
+
+        let toastTimer = null;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-text').textContent = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    </script>
+</body>
+</html>
